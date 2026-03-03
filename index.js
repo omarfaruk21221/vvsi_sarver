@@ -37,7 +37,7 @@ async function main() {
     const userCollection = db.collection("users");
     const customerCollection = db.collection("customers");
 
-    console.log("✅ Connected to MongoDB");
+    console.log(" Connected to MongoDB");
 
     // --- ৩. রুট এপিআই ---
     app.get("/", (req, res) => {
@@ -101,6 +101,36 @@ async function main() {
         });
       } catch (err) {
         res.status(500).json({ message: "সার্ভারে সমস্যা" });
+      }
+    });
+
+    // get user info api
+    app.get("/users", async (req, res) => {
+      try {
+        const users = await userCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(users);
+      } catch (error) {
+        res.status(500).send(error);
+      }
+    });
+
+    // indibiual data get by mobile phone number
+    app.get("/users/:mobile", async (req, res) => {
+      try {
+        const mobile = req.params.mobile;
+        const user = await userCollection.findOne({ mobile: mobile });
+        if (!user) {
+          return res.status(404).json({ message: "ইউজার পাওয়া যায়নি" });
+        }
+        const { password, ...userData } = user;
+        res.status(200).json(userData);
+      } catch (err) {
+        res
+          .status(500)
+          .json({ message: "সার্ভারে সমস্যা", error: err.message });
       }
     });
 
