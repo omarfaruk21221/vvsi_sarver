@@ -116,7 +116,6 @@ async function main() {
         res.status(500).send(error);
       }
     });
-
     // indibiual data get by mobile phone number
     app.get("/users/:mobile", async (req, res) => {
       try {
@@ -131,6 +130,28 @@ async function main() {
         res
           .status(500)
           .json({ message: "সার্ভারে সমস্যা", error: err.message });
+      }
+    });
+    /// update user Info
+    app.patch("/users/:mobile", async (req, res) => {
+      try {
+        const mobile = req.params.mobile;
+        const updatedInfo = req.body;
+
+        const result = await userCollection.updateOne(
+          { mobile: mobile },
+          { $set: updatedInfo },
+        );
+
+        if (result.modifiedCount > 0) {
+          res
+            .status(200)
+            .send({ success: true, message: "Updated successfully" });
+        } else {
+          res.status(400).send({ message: "No changes made" });
+        }
+      } catch (err) {
+        res.status(500).send({ message: "Server error", error: err.message });
       }
     });
 
@@ -201,7 +222,52 @@ async function main() {
       }
     });
 
-    // --- ৯. গ্রাহক ডিলিট এপিআই ---
+    // --- আপডেট কাস্টমার এপিআই (সংশোধিত ও ক্লিন) ---
+    app.patch("/update_customer/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const updatedFields = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res
+            .status(400)
+            .send({ success: false, message: "অকার্যকর আইডি ফরম্যাট।" });
+        }
+
+        const { _id, ...cleanData } = updatedFields;
+
+        if (Object.keys(cleanData).length === 0) {
+          return res.status(400).send({
+            success: false,
+            message: "পরিবর্তন করার মতো কোনো তথ্য পাওয়া যায়নি।",
+          });
+        }
+
+        const result = await customerCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: cleanData },
+        );
+
+        if (result.matchedCount === 0) {
+          return res
+            .status(404)
+            .send({ success: false, message: "কাস্টমার খুঁজে পাওয়া যায়নি।" });
+        }
+
+        res.status(200).send({
+          success: true,
+          message: "তথ্য সফলভাবে আপডেট করা হয়েছে।",
+        });
+      } catch (error) {
+        console.error("Update Error:", error);
+        res.status(500).send({
+          success: false,
+          message: "সার্ভারে অভ্যন্তরীণ ত্রুটি ঘটেছে।",
+        });
+      }
+    });
+
+    // ---  গ্রাহক ডিলিট এপিআই ---
     app.delete("/delete_customer/:id", async (req, res) => {
       try {
         const id = req.params.id;
