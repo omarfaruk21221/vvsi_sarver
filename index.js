@@ -155,21 +155,24 @@ async function main() {
       }
     });
 
-    // --- ৬. নতুন গ্রাহক যোগ করার এপিআই (ImgBB অনলাইন লিঙ্ক ভিত্তিক) ---
+    // --- ৬. নতুন গ্রাহক যোগ করার এপিআই (সংশোধিত) ---
     app.post("/add_customers", async (req, res) => {
       try {
-        const body = req.body;
+        const body = req.body; // ফ্রন্টএন্ড থেকে আসা JSON ডাটা
 
+        // ১. মোবাইল নম্বর দিয়ে আগে থেকেই কেউ নিবন্ধিত কি না চেক করা
         const existingCustomer = await customerCollection.findOne({
           mobile: body.mobile,
         });
+
         if (existingCustomer) {
-          return res.status(400).json({
+          return res.status(400).send({
             success: false,
             message: "এই মোবাইল নম্বরটি ইতিমধ্যে নিবন্ধিত আছে!",
           });
         }
 
+        // ২. নতুন কাস্টমার অবজেক্ট তৈরি (ফ্রন্টএন্ডের পাঠানো ফিল্ডের সাথে মিল রেখে)
         const newCustomer = {
           category: body.category,
           name: body.name,
@@ -179,17 +182,33 @@ async function main() {
           dob: body.dob,
           nidNumber: body.nidNumber,
           address: body.address,
-          image: body.image, // ImgBB ডিরেক্ট লিঙ্ক
-          nidPdf: body.nidPdf, // ImgBB ডিরেক্ট লিঙ্ক
+
+          // ইমেজ ইউআরএল গুলো সেভ করা হচ্ছে
+          image: body.image, // প্রোফাইল ফটো লিঙ্ক
+          nid_front: body.nid_front, // NID সামনের অংশের লিঙ্ক
+          nid_back: body.nid_back, // NID পিছনের অংশের লিঙ্ক
+
           cust_id: Number(body.cust_id),
-          status: "Active",
+          status: "প্রসেসিং",
           createdAt: new Date(),
         };
 
+        // ৩. ডাটাবেসে ইনসার্ট করা
         const result = await customerCollection.insertOne(newCustomer);
-        res.status(201).json({ success: true, data: result });
+
+        if (result.insertedId) {
+          res.status(201).send({
+            success: true,
+            message: "গ্রাহক সফলভাবে যোগ করা হয়েছে",
+            data: result,
+          });
+        }
       } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        console.error("Add Customer Error:", err);
+        res.status(500).send({
+          success: false,
+          message: "সার্ভারে সমস্যা হয়েছে: " + err.message,
+        });
       }
     });
 
