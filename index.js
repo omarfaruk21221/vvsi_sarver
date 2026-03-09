@@ -155,16 +155,52 @@ async function main() {
       }
     });
 
-    // get user info api
+    // modified get user info api
     app.get("/users", async (req, res) => {
       try {
+        const { status, search, sort, page, limit } = req.query;
+        let query = {};
+        if (status) {
+          query.status = status;
+        }
+
+        if (search) {
+          query.$or = [
+            { name: { $regex: search, $options: "i" } },
+            { mobile: { $regex: search, $options: "i" } },
+            { user_id: { $regex: search, $options: "i" } },
+          ];
+        }
+
+        // ৩. সর্টিং অর্ডার সেট করা
+        const sortOption = sort === "asc" ? 1 : -1;
+
+        // ৪. পেজিনেশন ক্যালকুলেশন
+        const pageNumber = parseInt(page) || 1;
+        const limitNumber = parseInt(limit) || 10;
+        const skip = (pageNumber - 1) * limitNumber;
+
+        // ৫. ডাটাবেস অপারেশন (একই সাথে ডাটা এবং টোটাল কাউন্ট আনা)
         const users = await userCollection
-          .find()
-          .sort({ createdAt: -1 })
+          .find(query)
+          .sort({ createdAt: sortOption })
+          .skip(skip)
+          .limit(limitNumber)
           .toArray();
-        res.send(users);
+
+        // মোট কয়টি ইউজার এই কুয়েরির আন্ডারে আছে তা বের করা (পেজিনেশনের জন্য)
+        const totalCount = await userCollection.countDocuments(query);
+
+        // ৬. রেসপন্স পাঠানো
+        res.send({
+          data: users,
+          totalCount: totalCount,
+          totalPages: Math.ceil(totalCount / limitNumber),
+          currentPage: pageNumber,
+        });
       } catch (error) {
-        res.status(500).send(error);
+        console.error("Error fetching users:", error);
+        res.status(500).send({ message: "সার্ভারে সমস্যা হয়েছে", error });
       }
     });
     // indibiual data get by mobile phone number
