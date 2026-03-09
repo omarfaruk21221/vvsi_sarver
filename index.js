@@ -44,31 +44,67 @@ async function main() {
       res.send("Bhai Bhai Ice-Cream Server is Running (Serverless Mode)");
     });
 
-    // --- ৪. রেজিস্ট্রেশন এপিআই (ImgBB লিঙ্ক ফ্রন্টএন্ড থেকে আসবে) ---
+    // ---  রেজিস্ট্রেশন এপিআই (ImgBB লিঙ্ক ফ্রন্টএন্ড থেকে আসবে) ---
     app.post("/register", async (req, res) => {
       try {
-        const { username, mobile, password, image } = req.body;
+        const {
+          name,
+          mobile,
+          password,
+          image,
+          category,
+          nidNumber,
+          fatherName,
+          motherName,
+          dob,
+          address,
+          nidPdfFornt,
+          nidPdfBackpart,
+        } = req.body;
+
         const exist = await userCollection.findOne({ mobile });
-        if (exist)
-          return res
-            .status(400)
-            .json({ message: "এই নম্বর দিয়ে অ্যাকাউন্ট আছে" });
+        if (exist) {
+          return res.status(400).send({
+            success: false,
+            message: "এই নম্বর দিয়ে অলরেডি অ্যাকাউন্ট আছে",
+          });
+        }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        await userCollection.insertOne({
-          username,
+        const newUser = {
+          name: name,
           mobile,
           password: hashedPassword,
-          image: image || "", // সরাসরি অনলাইন লিঙ্ক সেভ হবে
-          role: "manager",
+          image: image || "",
+          nidPdfFornt: nidPdfFornt || "",
+          nidPdfBackpart: nidPdfBackpart || "",
+          category: category || "সাধারণ",
+          nidNumber: nidNumber || "",
+          fatherName: fatherName || "",
+          motherName: motherName || "",
+          dob: dob || "",
+          address: address || "",
+          role: category || "সাধারণ",
+          status: "প্রসেসিং",
           createdAt: new Date(),
-        });
-        res
-          .status(201)
-          .json({ success: true, message: "Registration successful" });
+        };
+
+        // ৪. ডাটাবেসে সেভ করা
+        const result = await userCollection.insertOne(newUser);
+
+        if (result.insertedId) {
+          res.status(201).json({
+            success: true,
+            message: "নিবন্ধন সফলভাবে সম্পন্ন হয়েছে",
+          });
+        }
       } catch (err) {
-        res.status(500).json({ message: err.message });
+        console.error("Registration Error:", err);
+        res.status(500).json({
+          success: false,
+          message: "সার্ভারে সমস্যা হয়েছে: " + err.message,
+        });
       }
     });
 
@@ -101,6 +137,21 @@ async function main() {
         });
       } catch (err) {
         res.status(500).json({ message: "সার্ভারে সমস্যা" });
+      }
+    });
+
+    // get max user id
+    app.get("/max-user-id", async (req, res) => {
+      try {
+        const result = await userCollection
+          .find()
+          .sort({ user_id: -1 })
+          .limit(1)
+          .toArray();
+        const maxUserId = result.length > 0 ? result[0].user_id : 0;
+        res.send(maxUserId.toString());
+      } catch {
+        res.status(500).send({ message: "Server error" });
       }
     });
 
