@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const connectDB = require("./config/db");
+const mongoose = require("mongoose"); // Mongoose ইমপোর্ট
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -11,34 +11,30 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-async function run() {
+// ২. ডাটাবেস কানেকশন (Mongoose)
+const connectDB = async () => {
   try {
-    const db = await connectDB();
-
-    // --- ২. এখানে পরিবর্তন (আগের মতো সরাসরি পাথ দেওয়া হলো) ---
-
-    // ইউজার রিলেটেড সব এপিআই (যেমন: /users, /register, /login)
-    // এগুলো এখন সরাসরি আপনার আগের লিংকেই কাজ করবে
-    app.use("/", require("./routes/user.routes")(db));
-
-    // কাস্টমার রিলেটেড সব এপিআই (যেমন: /customers, /add_customers)
-    app.use("/", require("./routes/customer.routes")(db));
-
-    // রুট এপিআই
-    app.get("/", (req, res) => {
-      res.send(
-        "Bhai Bhai Ice-Cream Server is Running (Organized but same Paths)",
-      );
-    });
-
-    if (process.env.NODE_ENV !== "production") {
-      app.listen(port, () => console.log(`🚀 Server ready on port ${port}`));
-    }
+    await mongoose.connect(process.env.MONGO_URI); // আপনার ডট এনভ ফাইল থেকে লিঙ্ক নিবে
+    console.log("✅ MongoDB with Mongoose Connected");
   } catch (error) {
-    console.error("Server Start Error:", error);
+    console.error("❌ Database Connection Error:", error);
+    process.exit(1);
   }
-}
+};
 
-run();
+connectDB();
+
+// ৩. রাউট সেটআপ
+// যেহেতু মঙ্গুজ ব্যবহার করছি, তাই রাউট ফাইলে (db) পাস করার দরকার নেই
+app.use("/", require("./routes/user.routes"));
+app.use("/", require("./routes/customer.routes"));
+
+app.get("/", (req, res) => {
+  res.send("Bhai Bhai Ice-Cream Server is Running with Mongoose");
+});
+
+if (process.env.NODE_ENV !== "production") {
+  app.listen(port, () => console.log(`🚀 Server ready on port ${port}`));
+}
 
 module.exports = app;
