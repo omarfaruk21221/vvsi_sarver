@@ -1,0 +1,149 @@
+const express = require("express");
+const router = express.Router();
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { ObjectId } = require("mongodb");
+
+module.exports = (db) => {
+  const userCollection = db.collection("users");
+
+  // ১. রেজিস্ট্রেশন
+  router.post("/register", async (req, res) => {
+    try {
+      const { mobile, password, ...otherData } = req.body;
+      const exist = await userCollection.findOne({ mobile });
+      if (exist)
+        return res.status(400).send({
+          success: false,
+          message: "এই নম্বর দিয়ে অলরেডি অ্যাকাউন্ট আছে",
+        });
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const newUser = {
+        ...otherData,
+        mobile,
+        password: hashedPassword,
+        role: otherData.category || "সাধারণ",
+        status: "প্রসেসিং",
+        createdAt: new Date(),
+      };
+
+      await userCollection.insertOne(newUser);
+      res
+        .status(201)
+        .json({ success: true, message: "নিবন্ধন সফলভাবে সম্পন্ন হয়েছে" });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ২. লগইন
+  router.post("/login", async (req, res) => {
+    try {
+      const { mobile, password } = req.body;
+      const user = await userCollection.findOne({ mobile });
+      if (!user)
+        return res.status(404).json({ message: "অ্যাকাউন্ট পাওয়া যায়নি" });
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid)
+        return res.status(401).json({ message: "ভুল পাসওয়ার্ড" });
+
+      const token = jwt.sign(
+        { id: user._id, role: user.role },
+        process.env.JWT_SECRET || "secret",
+        { expiresIn: "7d" },
+      );
+      res.json({
+        success: true,
+        token,
+        user: { name: user.name, mobile: user.mobile, image: user.image },
+      });
+    } catch (err) {
+      res.status(500).json({ message: "সার্ভারে সমস্যা" });
+    }
+  });
+
+  // ৩. ম্যাক্স ইউজার আইডি
+  router.get("/max-user-id", async (req, res) => {
+    try {
+      const result = await userCollection
+        .find()
+        .sort({ user_id: -1 })
+        .limit(1)
+        .toArray();
+      const maxUserId = result.length > 0 ? result[0].user_id : 0;
+      res.send(maxUserId.toString());
+    } catch {
+      res.status(500).send({ message: "Server error" });
+    }
+  });
+
+  // ৪. ইউজার লিস্ট (Pagination & Search)
+  router.get("/users", async (req, res) => {
+    try {
+      const { status, search, sort, page, limit } = req.query;
+      let query = status ? { status } : {};
+      if (search) {
+        query.$or = [
+          { name: { $regex: search, $options: "i" } },
+          { mobile: { $regex: search, $options: "i" } },
+        ];
+      }
+      const pageNum = parseInt(page) || 1;
+      const limitNum = parseInt(limit) || 10;
+      const users = await userCollection
+        .find(query)
+        .sort({ createdAt: sort === "asc" ? 1 : -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .toArray();
+
+      const totalCount = await userCollection.countDocuments(query);
+      res.send({
+        data: users,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limitNum),
+        currentPage: pageNum,
+      });
+    } catch (error) {
+      res.status(500).send({ message: "সার্ভারে সমস্যা" });
+    }
+  });
+
+  // ৫. আইডি দিয়ে আপডেট (Status Update)
+  router.patch("/update_user/:id", async (req, res) => {
+    try {
+      const id = req.params.id;
+      const { status } = req.body;
+      if (!ObjectId.isValid(id))
+        return res.status(400).send({ message: "Invalid ID" });
+
+      const result = await userCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status } },
+      );
+      res.send({ success: true, message: "আপডেট হয়েছে" });
+    } catch (error) {
+      res.status(500).send({ message: "সার্ভারে সমস্যা" });
+    }
+  });
+  // 6.মোবাইল নম্বর দিয়ে ইউজার ডাটা পাওয়ার এপিআই
+  router.get("/users/:mobile", async (req, res) => {
+    try {
+      const mobile = req.params.mobile;
+      const user = await userCollection.findOne({ mobile: mobile });
+
+      if (!user) {
+        return res.status(404).json({ message: "ইউজার পাওয়া যায়নি" });
+      }
+
+      const { password, ...userData } = user;
+      res.status(200).json(userData);
+    } catch (err) {
+      res.status(500).json({ message: "সার্ভারে সমস্যা", error: err.message });
+    }
+  });
+
+  return router;
+};
