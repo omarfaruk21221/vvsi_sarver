@@ -219,6 +219,44 @@ async function main() {
           .json({ message: "সার্ভারে সমস্যা", error: err.message });
       }
     });
+    const { ObjectId } = require("mongodb"); // আপনার ফাইলের উপরে এটি আছে কিনা নিশ্চিত করুন
+
+    // ইউজার স্ট্যাটাস আপডেট করার এন্ডপয়েন্ট
+    app.patch("/update_user/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { status } = req.body;
+        if (!ObjectId.isValid(id)) {
+          return res
+            .status(400)
+            .send({ success: false, message: "ইনভ্যালিড আইডি ফরম্যাট" });
+        }
+        const filter = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            status: status,
+          },
+        };
+        const result = await userCollection.updateOne(filter, updatedDoc);
+        if (result.matchedCount === 0) {
+          return res
+            .status(404)
+            .send({ success: false, message: "ইউজার পাওয়া যায়নি" });
+        }
+        res.status(200).send({
+          success: true,
+          message: `ইউজার স্ট্যাটাস সফলভাবে ${status} করা হয়েছে`,
+          modifiedCount: result.modifiedCount,
+        });
+      } catch (error) {
+        console.error("Update Error:", error);
+        res.status(500).send({
+          success: false,
+          message: "সার্ভারে সমস্যা হয়েছে",
+          error: error.message,
+        });
+      }
+    });
     /// update user Info
     app.patch("/users/:mobile", async (req, res) => {
       try {
@@ -300,15 +338,51 @@ async function main() {
     });
 
     // --- ৭. সকল গ্রাহকের তালিকা ---
+    // Modified get customers info api
     app.get("/customers", async (req, res) => {
       try {
+        // ১. ফ্রন্টএন্ড থেকে পাঠানো কুয়েরি প্যারামিটারগুলো রিসিভ করা
+        const { search, sort, page, limit } = req.query;
+
+        // ২. সার্চ কুয়েরি তৈরি (নাম, মোবাইল বা কাস্টমার আইডি দিয়ে খোঁজা)
+        let query = {};
+        if (search) {
+          query.$or = [
+            { name: { $regex: search, $options: "i" } }, // 'i' মানে Case-insensitive
+            { mobile: { $regex: search, $options: "i" } },
+            { cust_id: { $regex: search, $options: "i" } },
+          ];
+        }
+
+        // ৩. সর্টিং অর্ডার সেট করা (নতুন আগে নাকি পুরাতন)
+        const sortOption = sort === "asc" ? 1 : -1;
+
+        // ৪. পেজিনেশন লজিক
+        const pageNumber = parseInt(page) || 1;
+        const limitNumber = parseInt(limit) || 10;
+        const skip = (pageNumber - 1) * limitNumber;
+
+        // ৫. ডাটাবেস থেকে ডাটা সংগ্রহ করা
         const customers = await customerCollection
-          .find()
-          .sort({ createdAt: -1 })
+          .find(query)
+          .sort({ createdAt: sortOption }) // অথবা cust_id দিয়ে সর্ট করতে পারেন
+          .skip(skip)
+          .limit(limitNumber)
           .toArray();
-        res.send(customers);
+
+        // মোট কয়টি ডাটা আছে তা বের করা (পেজিনেশন কম্পোনেন্টের জন্য জরুরি)
+        const totalCount = await customerCollection.countDocuments(query);
+
+        // ৬. অবজেক্ট আকারে ডাটা পাঠানো
+        res.send({
+          data: customers,
+          totalCount: totalCount,
+          totalPages: Math.ceil(totalCount / limitNumber),
+          currentPage: pageNumber,
+        });
       } catch (error) {
-        res.status(500).send(error);
+        console.error("Error fetching customers:", error);
+        res.status(500).send({ message: "সার্ভারে সমস্যা হয়েছে", error });
       }
     });
 
