@@ -2,42 +2,45 @@ const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const User = require("../models/User.model"); // মডেল ইমপোর্ট
 
-// ১. রেজিস্ট্রেশন
+// আপনার তৈরি করা মিডলওয়্যার ইমপোর্ট করুন (পাথ ঠিক আছে কি না নিশ্চিত হয়ে নিন)
+const verifyToken = require("../middleware/authMiddleware");
+const User = require("../models/User.model");
+
+// --- ১. রেজিস্ট্রেশন ---
 router.post("/register", async (req, res) => {
   try {
-    const { mobile, password, ...otherData } = req.body;
+    const { mobile, password, details, ...otherData } = req.body;
 
-    // নম্বর চেক
     const exist = await User.findOne({ mobile });
-    if (exist)
+    if (exist) {
       return res.status(400).send({
         success: false,
-        message: "এই নম্বর দিয়ে অলরেডি অ্যাকাউন্ট আছে",
+        message: "এই মোবাইল নম্বর দিয়ে পূর্বেই অ্যাকাউন্ট আছে",
       });
+    }
 
-    // পাসওয়ার্ড হ্যাশ করা
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
       ...otherData,
       mobile,
       password: hashedPassword,
-      role: otherData.category || "সাধারণ",
+      details,
       status: "প্রসেসিং",
     });
 
     await newUser.save();
-    res
-      .status(201)
-      .json({ success: true, message: "নিবন্ধন সফলভাবে সম্পন্ন হয়েছে" });
+    res.status(201).json({
+      success: true,
+      message: "নিবন্ধন সফলভাবে সম্পন্ন হয়েছে",
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// ২. লগইন
+// --- ২. লগইন ---
 router.post("/login", async (req, res) => {
   try {
     const { mobile, password } = req.body;
@@ -50,7 +53,6 @@ router.post("/login", async (req, res) => {
     if (!isPasswordValid)
       return res.status(401).json({ message: "ভুল পাসওয়ার্ড" });
 
-    // টোকেন তৈরি
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET || "secret",
@@ -60,26 +62,29 @@ router.post("/login", async (req, res) => {
     res.json({
       success: true,
       token,
-      user: { name: user.name, mobile: user.mobile, image: user.image },
+      user: { name: user.name, image: user.image },
     });
   } catch (err) {
     res.status(500).json({ message: "সার্ভারে সমস্যা" });
   }
 });
 
-// ৩. ম্যাক্স ইউজার আইডি
-router.get("/max-user-id", async (req, res) => {
+// --- ৩. নিজের প্রোফাইল ডাটা পাওয়া (টোকেন ভিত্তিক) ---
+// এটি এখন সবচেয়ে সুরক্ষিত, প্যারামস লাগে না
+router.get("/me", verifyToken, async (req, res) => {
   try {
-    const result = await User.findOne().sort({ user_id: -1 });
-    const maxUserId = result ? result.user_id : 0;
-    res.send(maxUserId.toString());
-  } catch {
-    res.status(500).send({ message: "Server error" });
+    const user = await User.findById(req.user.id).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "ইউজার পাওয়া যায়নি" });
+    }
+    res.status(200).json(user);
+  } catch (err) {
+    res.status(500).json({ message: "সার্ভারে সমস্যা", error: err.message });
   }
 });
 
-// ৪. ইউজার লিস্ট (Pagination & Search)
-router.get("/users", async (req, res) => {
+// --- ৪. ইউজার লিস্ট (Pagination & Search) ---
+router.get("/users", verifyToken, async (req, res) => {
   try {
     const { status, search, sort, page, limit } = req.query;
     let query = status ? { status } : {};
@@ -95,13 +100,12 @@ router.get("/users", async (req, res) => {
     const limitNum = parseInt(limit) || 10;
 
     const users = await User.find(query)
-      .select("-password") // পাসওয়ার্ড সিকিউরিটির জন্য বাদ দেওয়া হয়েছে
+      .select("-password")
       .sort({ createdAt: sort === "asc" ? 1 : -1 })
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum);
 
     const totalCount = await User.countDocuments(query);
-
     res.send({
       data: users,
       totalCount,
@@ -113,15 +117,15 @@ router.get("/users", async (req, res) => {
   }
 });
 
-// ৫. আইডি দিয়ে আপডেট (Status Update)
-router.patch("/update_user/:id", async (req, res) => {
+// --- ৫. আইডি দিয়ে স্ট্যাটাস আপডেট ---
+router.patch("/update_user/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
     const result = await User.findByIdAndUpdate(id, { status }, { new: true });
-
-    if (!result) return res.status(404).send({ message: "ইউজার পাওয়া যায়নি" });
+    if (!result)
+      return res.status(404).send({ message: "ইউজার পাওয়া যায়নি" });
 
     res.send({ success: true, message: "আপডেট হয়েছে" });
   } catch (error) {
@@ -129,8 +133,19 @@ router.patch("/update_user/:id", async (req, res) => {
   }
 });
 
-// ৬. মোবাইল নম্বর দিয়ে ইউজার ডাটা পাওয়ার এপিআই
-router.get("/users/:mobile", async (req, res) => {
+// --- ৬. ম্যাক্স ইউজার আইডি ---
+router.get("/max-user-id", async (req, res) => {
+  try {
+    const result = await User.findOne().sort({ user_id: -1 });
+    const maxUserId = result ? result.user_id : 0;
+    res.send(maxUserId.toString());
+  } catch {
+    res.status(500).send({ message: "Server error" });
+  }
+});
+
+// --- ৭. মোবাইল নম্বর দিয়ে ডাটা (যদি প্রয়োজন হয়, তবে /me ব্যবহার করা উত্তম) ---
+router.get("/users/:mobile", verifyToken, async (req, res) => {
   try {
     const mobile = req.params.mobile;
     const user = await User.findOne({ mobile }).select("-password");
@@ -138,7 +153,6 @@ router.get("/users/:mobile", async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "ইউজার পাওয়া যায়নি" });
     }
-
     res.status(200).json(user);
   } catch (err) {
     res.status(500).json({ message: "সার্ভারে সমস্যা", error: err.message });
