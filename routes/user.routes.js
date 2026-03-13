@@ -70,7 +70,6 @@ router.post("/login", async (req, res) => {
 });
 
 // --- ৩. নিজের প্রোফাইল ডাটা পাওয়া (টোকেন ভিত্তিক) ---
-// এটি এখন সবচেয়ে সুরক্ষিত, প্যারামস লাগে না
 router.get("/me", verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
