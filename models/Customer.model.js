@@ -1,48 +1,30 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const customerSchema = new mongoose.Schema({
-  cust_id: { 
-    type: Number, 
-    required: true, 
-    unique: true 
+const customerSchema = new mongoose.Schema(
+  {
+    cust_id: { type: Number, required: true, unique: true },
+    name: { type: String, required: true, trim: true },
+    mobile: { type: String, required: true, unique: true },
+    boxApplication: { type: String, default: "না" },
+    role: {
+      type: String,
+      enum: ["হকার", "সেলসম্যান", "সাধারণ"],
+      default: "সাধারণ",
+    },
+    status: { type: String, default: "pending" },
+    current_due: { type: Number, default: 0 },
+    details: {
+      fatherName: { type: String, default: "" },
+      motherName: { type: String, default: "" },
+      dob: { type: String, default: "" },
+      address: { type: String, default: "" },
+      image: { type: String, default: "" },
+      nidNumber: { type: String, default: "" },
+      nidPdfFornt: { type: String, default: "" },
+      nidPdfBackpart: { type: String, default: "" },
+    },
   },
-  name: { 
-    type: String, 
-    required: true,
-    trim: true // নামের আগে-পিছে ফাঁকা জায়গা থাকলে কেটে দিবে
-  },
-  mobile: { 
-    type: String, 
-    required: true, 
-    unique: true 
-  },
-  category: { 
-    type: String, 
-    enum: ["হকার", "সেলসম্যান"], 
-    required: true 
-  },
-  status: { 
-    type: String, 
-    default: "Active" 
-  },
-  current_due: { 
-    type: Number, 
-    default: 0 
-  },
-  // বিস্তারিত তথ্য (Nested Object)
-  details: {
-    fatherName: { type: String, default: "" },
-    motherName: { type: String, default: "" },
-    dob: { type: String, default: "" },
-    address: { type: String, default: "" },
-    image: { type: String, default: "" }, // ছবির URL
-    nidNumber: { type: String, default: "" },
-    nidPdf: { type: String, default: "" } // NID ফাইলের URL
-  },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
-  }
-}, { timestamps: true }); // এটি অটোমেটিক 'updatedAt' ফিল্ড তৈরি করবে
+  { timestamps: true },
+);
 
-module.exports = mongoose.model('Customer', customerSchema);
+module.exports = mongoose.model("Customer", customerSchema);

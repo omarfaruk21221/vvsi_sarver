@@ -27,14 +27,12 @@ const connectDB = async () => {
     console.log("✅ MongoDB with Mongoose Connected");
   } catch (error) {
     console.error("❌ Database Connection Error:", error);
-    // ডাটাবেস কানেক্ট না হলে সার্ভার বন্ধ না করে আমরা চাইলে এরর থ্রো করতে পারি
   }
 };
 
 connectDB();
 
 // ৩. রাউট সেটআপ
-// সরাসরি মডেল ভিত্তিক রাউট ব্যবহার
 app.use("/", require("./routes/user.routes"));
 app.use("/", require("./routes/customer.routes"));
 
